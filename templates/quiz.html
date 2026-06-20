@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card screen">
+  <div class="quiz-head">
+    <div class="quiz-meta">
+      <span class="chip">{{ subject_label }}</span>
+      <span class="chip chip-soft">{{ difficulty }} level</span>
+      {% if focus_topic %}
+      <span class="chip chip-soft">Focus: {{ focus_topic }} ({{ focus_matched }}/{{ questions|length }} matched)</span>
+      {% endif %}
+    </div>
+    <div class="timer">
+      <span class="timer-icon">&#9201;</span>
+      <span>{{ time_label }}</span>
+    </div>
+  </div>
+
+  <div class="progress-wrap">
+    <div class="progress-label">
+      <span>Time remaining</span>
+      <span>{{ questions|length }} questions</span>
+    </div>
+    <div class="progress-track">
+      <div class="progress-bar timer-drain" style="animation-duration: {{ recommended_seconds }}s;"></div>
+    </div>
+  </div>
+
+  <form id="quizForm" action="/result" method="post">
+    <input type="hidden" name="questions" value="{{ questions_json }}" />
+    <input type="hidden" name="recommended_seconds" value="{{ recommended_seconds }}" />
+    <input type="hidden" name="start_ts" value="{{ start_ts }}" />
+    <input type="hidden" name="subject_label" value="{{ subject_label }}" />
+    <input type="hidden" name="difficulty" value="{{ difficulty }}" />
+
+    <div class="question-list">
+      {% for q in questions %}
+      <article class="question-card">
+        <p class="question-meta">Question {{ q.id }} &middot; {{ q.question_type.replace('_', ' ') }} &middot; {{ q.difficulty }}</p>
+        <p class="question-prompt">{{ q.prompt }}</p>
+
+        {% if q.question_type == 'short_answer' %}
+        <textarea name="answer_{{ q.id }}" rows="2" placeholder="Type your answer..."></textarea>
+        {% else %}
+        <div class="choices">
+          {% for choice in q.choices %}
+          <label class="choice">
+            <input type="radio" name="answer_{{ q.id }}" value="{{ choice }}" />
+            <span>{{ choice }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </article>
+      {% endfor %}
+    </div>
+  </form>
+
+  <form id="jsonForm" action="/export/json" method="post" class="inline-form">
+    <input type="hidden" name="questions" value="{{ questions_json }}" />
+  </form>
+  <form id="csvForm" action="/export/csv" method="post" class="inline-form">
+    <input type="hidden" name="questions" value="{{ questions_json }}" />
+  </form>
+
+  <div class="actions">
+    <button type="submit" form="quizForm" class="btn btn-success">Submit Quiz</button>
+    <button type="submit" form="jsonForm" class="btn btn-ghost">Export JSON</button>
+    <button type="submit" form="csvForm" class="btn btn-ghost">Export CSV</button>
+    <a href="/" class="btn btn-ghost">Cancel</a>
+  </div>
+</section>
+{% endblock %}

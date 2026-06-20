@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuestGen - Smart Question Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app-bg"></div>
+  <main class="container">
+    <header class="hero">
+      <div class="logo">QG</div>
+      <div>
+        <h1>QuestGen</h1>
+        <p class="tagline">A smart, adaptive quiz generator across every topic worth knowing.</p>
+      </div>
+    </header>
+
+    {% block content %}{% endblock %}
+
+    <footer class="foot">Built by Rejoice Akosua Dzanku</footer>
+  </main>
+</body>
+</html>

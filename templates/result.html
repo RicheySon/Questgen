@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card screen">
+  <h2 class="card-title">Your Results</h2>
+
+  <div class="score-board">
+    <div class="score-ring" style="background: {{ '#16a34a' if result.score_percent >= 50 else '#dc2626' }};">
+      <span>{{ result.score_percent }}%</span>
+    </div>
+    <div class="score-stats">
+      <p>
+        <strong>{{ result.correct_count }} / {{ result.total }}</strong>
+        <span>Correct answers</span>
+      </p>
+      <p>
+        <strong>
+          {% if result.score_percent >= 90 %}Excellent
+          {% elif result.score_percent >= 70 %}Great
+          {% elif result.score_percent >= 50 %}Good
+          {% elif result.score_percent >= 30 %}Keep going
+          {% else %}Needs work{% endif %}
+        </strong>
+        <span>Performance</span>
+      </p>
+      <p>
+        <strong>{{ result.next_difficulty }}</strong>
+        <span>Suggested next level</span>
+      </p>
+      <p>
+        <strong{% if over_time %} class="over-time"{% endif %}>{{ time_taken }} / {{ time_limit }}</strong>
+        <span>Time taken {% if over_time %}(time was up){% endif %}</span>
+      </p>
+    </div>
+  </div>
+
+  <div class="review-head">
+    <h3>Question Review</h3>
+    <div class="legend">
+      <span class="legend-item"><i class="dot dot-green"></i> Correct</span>
+      <span class="legend-item"><i class="dot dot-red"></i> Wrong</span>
+    </div>
+  </div>
+
+  <div class="feedback-list">
+    {% for item in result.feedback %}
+    <div class="feedback-item {{ 'correct' if item.is_correct else 'incorrect' }}">
+      <div class="feedback-top">
+        <p class="feedback-title">Q{{ item.id }}. {{ item.question }}</p>
+        <span class="verdict {{ 'correct' if item.is_correct else 'incorrect' }}">{{ 'Correct' if item.is_correct else 'Wrong' }}</span>
+      </div>
+      <p class="answer-row {{ 'good' if item.is_correct else 'bad' }}">
+        <span class="label">Your answer:</span> <span class="value">{{ item.your_answer if item.your_answer else '(no answer)' }}</span>
+      </p>
+      {% if not item.is_correct %}
+      <p class="answer-row good"><span class="label">Correct answer:</span> <span class="value">{{ item.expected_answer }}</span></p>
+      {% endif %}
+      <p class="explain">{{ item.explanation }}</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  {% set share_subject = 'My QuestGen Result' %}
+  {% set share_body = 'I scored ' ~ result.score_percent ~ '% (' ~ result.correct_count ~ '/' ~ result.total ~ ') on a ' ~ subject_label ~ ' quiz on QuestGen!' %}
+
+  <form id="resultPdfForm" action="/export/pdf" method="post" class="inline-form">
+    <input type="hidden" name="questions" value="{{ questions_json }}" />
+    <input type="hidden" name="answers" value="{{ answers_json }}" />
+    <input type="hidden" name="subject_label" value="{{ subject_label }}" />
+    <input type="hidden" name="difficulty" value="{{ difficulty }}" />
+    <input type="hidden" name="time_taken" value="{{ time_taken }}" />
+    <input type="hidden" name="time_limit" value="{{ time_limit }}" />
+  </form>
+  <form id="resultJsonForm" action="/export/json" method="post" class="inline-form">
+    <input type="hidden" name="questions" value="{{ questions_json }}" />
+  </form>
+
+  <div class="actions">
+    <a href="/" class="btn btn-primary">New Quiz</a>
+    <button type="submit" form="resultPdfForm" class="btn btn-ghost">Download PDF</button>
+    <button type="submit" form="resultJsonForm" class="btn btn-ghost">Export JSON</button>
+    <a class="btn btn-ghost" href="mailto:?subject={{ share_subject | urlencode }}&body={{ share_body | urlencode }}">Share</a>
+  </div>
+</section>
+{% endblock %}

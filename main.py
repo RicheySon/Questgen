@@ -10,10 +10,13 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
+from fastapi.templating import Jinja2Templates
+from fpdf import FPDF
+from fpdf.enums import XPos, YPos
+from pydantic import BaseModel
 
 
 @dataclass(frozen=True)
@@ -537,16 +540,6 @@ OPENTDB_URL = "https://opentdb.com/api.php"
 OPENTDB_COUNT_URL = "https://opentdb.com/api_count.php"
 
 
-class GenerateRequest(BaseModel):
-    subject: str = Field(default="science")
-    total_questions: int = Field(default=8, ge=1, le=30)
-    difficulty: str = Field(default="medium")
-    focus_topic: str = Field(default="")
-    include_multiple_choice: bool = True
-    include_short_answer: bool = True
-    include_true_false: bool = True
-
-
 class QuestionPayload(BaseModel):
     id: int
     difficulty: str
@@ -555,29 +548,6 @@ class QuestionPayload(BaseModel):
     choices: list[str] | None = None
     answer: str
     explanation: str
-
-
-class GenerateResponse(BaseModel):
-    adjusted_difficulty: str
-    subject: str
-    subject_label: str
-    recommended_seconds: int
-    focus_topic: str
-    focus_matched: int
-    questions: list[QuestionPayload]
-
-
-class SubmitRequest(BaseModel):
-    questions: list[QuestionPayload]
-    answers: list[str]
-
-
-class SubmitResponse(BaseModel):
-    score_percent: float
-    correct_count: int
-    total: int
-    next_difficulty: str
-    feedback: list[dict[str, Any]]
 
 
 def normalize_answer(text: str) -> str:
@@ -594,16 +564,14 @@ def suggest_difficulty(score_percent: float) -> str:
     return "easy"
 
 
-def question_types_from_request(req: GenerateRequest) -> list[str]:
+def selected_types_from_flags(include_mc: bool, include_short: bool, include_tf: bool) -> list[str]:
     available: list[str] = []
-    if req.include_multiple_choice:
+    if include_mc:
         available.append("multiple_choice")
-    if req.include_short_answer:
+    if include_short:
         available.append("short_answer")
-    if req.include_true_false:
+    if include_tf:
         available.append("true_false")
-    if not available:
-        raise HTTPException(status_code=400, detail="Select at least one question type.")
     return available
 
 
@@ -770,43 +738,18 @@ def api_true_false_question(
     )
 
 
-app = FastAPI(title="Smart Question Generator")
-app.mount("/static", StaticFiles(directory="static"), name="static")
-
-
-@app.get("/", response_class=HTMLResponse)
-def home() -> HTMLResponse:
-    with open("static/index.html", "r", encoding="utf-8") as file:
-        return HTMLResponse(content=file.read())
-
-
-@app.get("/api/subjects")
-def list_subjects() -> dict[str, list[dict[str, str]]]:
-    subjects = [
-        {"value": key, "label": subject_label(key)}
-        for key in sorted(TEMPLATES.keys(), key=subject_label)
-    ]
-    return {"subjects": subjects}
-
-
-@app.post("/api/generate", response_model=GenerateResponse)
-def generate_questions(payload: GenerateRequest) -> GenerateResponse:
-    subject_key = payload.subject.strip().lower()
-    if subject_key not in TEMPLATES:
-        raise HTTPException(status_code=400, detail="Unsupported subject.")
-
-    difficulty = payload.difficulty.strip().lower()
-    if difficulty not in DIFFICULTY_LEVELS:
-        raise HTTPException(status_code=400, detail="Unsupported difficulty.")
-
-    selected_types = question_types_from_request(payload)
+def generate_quiz(
+    subject_key: str,
+    total_questions: int,
+    difficulty: str,
+    focus_topic: str,
+    selected_types: list[str],
+) -> dict[str, Any]:
     content_difficulty = CONTENT_DIFFICULTY[difficulty]
-    type_sequence = build_type_sequence(selected_types, payload.total_questions)
+    type_sequence = build_type_sequence(selected_types, total_questions)
 
-    # Pull a large, unique batch from the live question bank (Open Trivia DB).
-    # Multiple-choice and short-answer both draw from "multiple" type questions.
     category_id = OPENTDB_CATEGORY.get(subject_key)
-    tokens = focus_tokens(payload.focus_topic)
+    tokens = focus_tokens(focus_topic)
     use_focus = bool(tokens) and category_id is not None
 
     multiple_pool: list[dict[str, Any]] = []
@@ -817,14 +760,13 @@ def generate_questions(payload: GenerateRequest) -> GenerateResponse:
         # Never request more than exists, or the API returns an empty batch and we
         # would fall back to the small local bank (causing repeated questions).
         available = opentdb_available(category_id, content_difficulty)
-        fallback_amount = min(50, max(payload.total_questions * 2, 10))
+        fallback_amount = min(50, max(total_questions * 2, 10))
         amount = min(50, available) if available > 0 else fallback_amount
 
         # One untyped request: it can never overshoot a per-type count (which would
         # return an empty batch), maximizes unique questions, and dodges the rate limit.
         raw = fetch_opentdb(category_id, content_difficulty, amount)
         if use_focus:
-            # Rank questions matching the focus keywords first.
             matched = [r for r in raw if result_matches_focus(r, tokens)]
             others = [r for r in raw if r not in matched]
             matched_prompts = {decode(r["question"]) for r in matched}
@@ -858,32 +800,22 @@ def generate_questions(payload: GenerateRequest) -> GenerateResponse:
                 questions.append(build_choice_question(template_item, qid, difficulty, q_type))
 
     focus_matched = sum(1 for q in questions if q.prompt in matched_prompts)
+    recommended_seconds = min(SECONDS_PER_DIFFICULTY[difficulty] * total_questions, 3600)
 
-    per_question = SECONDS_PER_DIFFICULTY[difficulty]
-    recommended_seconds = min(per_question * payload.total_questions, 3600)
-
-    return GenerateResponse(
-        adjusted_difficulty=difficulty,
-        subject=subject_key,
-        subject_label=subject_label(subject_key),
-        recommended_seconds=recommended_seconds,
-        focus_topic=payload.focus_topic.strip(),
-        focus_matched=focus_matched,
-        questions=questions,
-    )
+    return {
+        "questions": questions,
+        "recommended_seconds": recommended_seconds,
+        "focus_matched": focus_matched,
+        "subject_label": subject_label(subject_key),
+        "adjusted_difficulty": difficulty,
+    }
 
 
-@app.post("/api/submit", response_model=SubmitResponse)
-def submit_answers(payload: SubmitRequest) -> SubmitResponse:
-    if len(payload.questions) != len(payload.answers):
-        raise HTTPException(status_code=400, detail="Answer count does not match question count.")
-
+def grade_quiz(questions: list[QuestionPayload], answers: list[str]) -> dict[str, Any]:
     feedback: list[dict[str, Any]] = []
     correct_count = 0
-    for question, user_answer in zip(payload.questions, payload.answers):
-        expected = normalize_answer(question.answer)
-        got = normalize_answer(user_answer)
-        is_correct = expected == got
+    for question, user_answer in zip(questions, answers):
+        is_correct = normalize_answer(question.answer) == normalize_answer(user_answer)
         if is_correct:
             correct_count += 1
         feedback.append(
@@ -899,14 +831,256 @@ def submit_answers(payload: SubmitRequest) -> SubmitResponse:
             }
         )
 
-    total = len(payload.questions)
+    total = len(questions)
     score_percent = round((correct_count / total) * 100.0, 2) if total else 0.0
-    next_difficulty = suggest_difficulty(score_percent)
+    return {
+        "score_percent": score_percent,
+        "correct_count": correct_count,
+        "total": total,
+        "next_difficulty": suggest_difficulty(score_percent),
+        "feedback": feedback,
+    }
 
-    return SubmitResponse(
-        score_percent=score_percent,
-        correct_count=correct_count,
-        total=total,
-        next_difficulty=next_difficulty,
-        feedback=feedback,
+
+def format_seconds(total_seconds: int) -> str:
+    minutes, seconds = divmod(max(0, int(total_seconds)), 60)
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def serialize_questions(questions: list[QuestionPayload]) -> str:
+    return json.dumps([q.model_dump() for q in questions])
+
+
+def deserialize_questions(raw: str) -> list[QuestionPayload]:
+    try:
+        data = json.loads(raw) if raw else []
+        return [QuestionPayload(**item) for item in data]
+    except (ValueError, TypeError):
+        return []
+
+
+def parse_int(value: Any, default: int, low: int, high: int) -> int:
+    try:
+        return max(low, min(high, int(str(value))))
+    except (ValueError, TypeError):
+        return default
+
+
+def latin1(text: str) -> str:
+    """fpdf core fonts use latin-1; drop characters it cannot encode."""
+    return str(text).encode("latin-1", "replace").decode("latin-1")
+
+
+def build_quiz_csv(questions: list[QuestionPayload]) -> str:
+    header = ["id", "type", "difficulty", "prompt", "choices", "answer"]
+    rows = [",".join(header)]
+    for q in questions:
+        cells = [
+            str(q.id),
+            q.question_type,
+            q.difficulty,
+            q.prompt.replace('"', '""'),
+            " | ".join(q.choices or []).replace('"', '""'),
+            q.answer.replace('"', '""'),
+        ]
+        rows.append(",".join(f'"{cell}"' for cell in cells))
+    return "\n".join(rows)
+
+
+def build_result_pdf(meta: dict[str, Any], result: dict[str, Any]) -> bytes:
+    pdf = FPDF(format="A4")
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+
+    def line(text: str, height: float = 6.0) -> None:
+        pdf.multi_cell(0, height, latin1(text), new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+
+    pdf.set_font("Helvetica", "B", 18)
+    pdf.set_text_color(26, 31, 54)
+    line("QuestGen - Result Sheet", 10)
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(110, 115, 144)
+    line("Built by Rejoice Akosua Dzanku")
+    pdf.ln(2)
+
+    pdf.set_font("Helvetica", "", 11)
+    pdf.set_text_color(26, 31, 54)
+    for info_line in [
+        f"Topic: {meta['subject_label']}",
+        f"Difficulty: {meta['adjusted_difficulty']}",
+        f"Score: {result['score_percent']}%  ({result['correct_count']}/{result['total']} correct)",
+        f"Suggested next level: {result['next_difficulty']}",
+        f"Time taken: {meta['time_taken']} (limit {meta['time_limit']})",
+    ]:
+        line(info_line)
+    pdf.ln(3)
+
+    for item in result["feedback"]:
+        pdf.set_font("Helvetica", "B", 11)
+        if item["is_correct"]:
+            pdf.set_text_color(22, 163, 74)
+            verdict = "[CORRECT]"
+        else:
+            pdf.set_text_color(220, 38, 38)
+            verdict = "[WRONG]"
+        line(f"Q{item['id']} {verdict}  {item['question']}")
+
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(26, 31, 54)
+        line(f"Your answer: {item['your_answer'] or '(no answer)'}", 5)
+        if not item["is_correct"]:
+            line(f"Correct answer: {item['expected_answer']}", 5)
+        pdf.ln(3)
+
+    return bytes(pdf.output())
+
+
+app = FastAPI(title="Smart Question Generator")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+templates = Jinja2Templates(directory="templates")
+
+
+def category_options() -> list[dict[str, str]]:
+    return [{"value": key, "label": subject_label(key)} for key in sorted(TEMPLATES.keys(), key=subject_label)]
+
+
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request) -> HTMLResponse:
+    return templates.TemplateResponse(
+        request,
+        "index.html",
+        {
+            "categories": category_options(),
+            "difficulty_levels": DIFFICULTY_LEVELS,
+            "error": None,
+        },
+    )
+
+
+@app.post("/quiz", response_class=HTMLResponse)
+async def quiz(request: Request) -> HTMLResponse:
+    form = await request.form()
+
+    subject_key = str(form.get("subject", "")).strip().lower()
+    if subject_key not in TEMPLATES:
+        subject_key = "general"
+
+    difficulty = str(form.get("difficulty", "medium")).strip().lower()
+    if difficulty not in DIFFICULTY_LEVELS:
+        difficulty = "medium"
+
+    total_questions = parse_int(form.get("total_questions"), default=8, low=1, high=30)
+    focus_topic = str(form.get("focus_topic", "")).strip()
+
+    selected_types = selected_types_from_flags(
+        include_mc=form.get("multiple_choice") is not None,
+        include_short=form.get("short_answer") is not None,
+        include_tf=form.get("true_false") is not None,
+    )
+    if not selected_types:
+        return templates.TemplateResponse(
+            request,
+            "index.html",
+            {
+                "categories": category_options(),
+                "difficulty_levels": DIFFICULTY_LEVELS,
+                "error": "Please select at least one question type.",
+            },
+        )
+
+    data = generate_quiz(subject_key, total_questions, difficulty, focus_topic, selected_types)
+
+    return templates.TemplateResponse(
+        request,
+        "quiz.html",
+        {
+            "questions": data["questions"],
+            "questions_json": serialize_questions(data["questions"]),
+            "recommended_seconds": data["recommended_seconds"],
+            "time_label": format_seconds(data["recommended_seconds"]),
+            "subject_label": data["subject_label"],
+            "difficulty": difficulty,
+            "focus_topic": focus_topic,
+            "focus_matched": data["focus_matched"],
+            "start_ts": time.time(),
+        },
+    )
+
+
+@app.post("/result", response_class=HTMLResponse)
+async def result(request: Request) -> HTMLResponse:
+    form = await request.form()
+    questions = deserialize_questions(str(form.get("questions", "")))
+    answers = [str(form.get(f"answer_{q.id}", "")) for q in questions]
+
+    graded = grade_quiz(questions, answers)
+
+    recommended_seconds = parse_int(form.get("recommended_seconds"), default=0, low=0, high=3600)
+    try:
+        elapsed = max(0, int(time.time() - float(form.get("start_ts", 0))))
+    except (ValueError, TypeError):
+        elapsed = 0
+    if recommended_seconds:
+        elapsed = min(elapsed, recommended_seconds)
+
+    return templates.TemplateResponse(
+        request,
+        "result.html",
+        {
+            "result": graded,
+            "subject_label": str(form.get("subject_label", "")),
+            "difficulty": str(form.get("difficulty", "")),
+            "time_taken": format_seconds(elapsed),
+            "time_limit": format_seconds(recommended_seconds),
+            "over_time": bool(recommended_seconds) and elapsed >= recommended_seconds,
+            "questions_json": str(form.get("questions", "")),
+            "answers_json": json.dumps(answers),
+        },
+    )
+
+
+@app.post("/export/json")
+async def export_json(request: Request) -> Response:
+    form = await request.form()
+    questions = deserialize_questions(str(form.get("questions", "")))
+    content = json.dumps([q.model_dump() for q in questions], indent=2)
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": "attachment; filename=questgen-questions.json"},
+    )
+
+
+@app.post("/export/csv")
+async def export_csv(request: Request) -> Response:
+    form = await request.form()
+    questions = deserialize_questions(str(form.get("questions", "")))
+    return Response(
+        content=build_quiz_csv(questions),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=questgen-questions.csv"},
+    )
+
+
+@app.post("/export/pdf")
+async def export_pdf(request: Request) -> Response:
+    form = await request.form()
+    questions = deserialize_questions(str(form.get("questions", "")))
+    try:
+        answers = json.loads(str(form.get("answers", "[]")))
+    except ValueError:
+        answers = []
+    graded = grade_quiz(questions, [str(a) for a in answers])
+
+    meta = {
+        "subject_label": str(form.get("subject_label", "")),
+        "adjusted_difficulty": str(form.get("difficulty", "")),
+        "time_taken": str(form.get("time_taken", "00:00")),
+        "time_limit": str(form.get("time_limit", "00:00")),
+    }
+    pdf_bytes = build_result_pdf(meta, graded)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=questgen-result-sheet.pdf"},
     )

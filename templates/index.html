@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card screen">
+  <h2 class="card-title">Build your quiz</h2>
+  <p class="card-sub">Pick a category, choose your style, and we'll adapt the difficulty and timing for you.</p>
+
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <form class="form-grid" action="/quiz" method="post">
+    <label class="field">
+      <span>Category</span>
+      <select id="subject" name="subject">
+        {% for cat in categories %}
+        <option value="{{ cat.value }}">{{ cat.label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+
+    <label class="field">
+      <span>Focus Topic (optional)</span>
+      <input id="focus_topic" name="focus_topic" type="text" placeholder="e.g. Algebra, Space, World War II" autocomplete="off" />
+      <small class="hint">Narrow a category to a specific topic. We prioritise questions matching your keyword.</small>
+    </label>
+
+    <label class="field">
+      <span>Number of Questions</span>
+      <input id="total_questions" name="total_questions" type="number" min="1" max="30" value="8" />
+    </label>
+
+    <label class="field">
+      <span>Difficulty Level</span>
+      <select id="difficulty" name="difficulty">
+        {% for level in difficulty_levels %}
+        <option value="{{ level }}" {% if level == 'medium' %}selected{% endif %}>{{ level | capitalize }}</option>
+        {% endfor %}
+      </select>
+      <small class="hint">Your whole quiz is set to this level, and time per question tightens as difficulty rises.</small>
+    </label>
+
+    <fieldset class="field types">
+      <legend>Question Types (mix and match)</legend>
+      <label class="check"><input type="checkbox" name="multiple_choice" value="1" checked /> <span>Multiple Choice</span></label>
+      <label class="check"><input type="checkbox" name="short_answer" value="1" checked /> <span>Short Answer</span></label>
+      <label class="check"><input type="checkbox" name="true_false" value="1" checked /> <span>True / False</span></label>
+    </fieldset>
+
+    <div class="time-note">Time is allotted automatically: up to 1 minute per question on Easy, down to 25s on Advanced.</div>
+
+    <button type="submit" class="btn btn-primary btn-block">Generate Quiz</button>
+  </form>
+</section>
+{% endblock %}

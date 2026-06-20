@@ -273,6 +273,36 @@ select:focus, input:focus, textarea:focus {
 
 .hidden { display: none !important; }
 
+/* Server-rendered additions */
+a.btn { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+
+.inline-form { display: none; }
+
+.alert {
+  background: var(--danger-soft);
+  border: 1px solid #f6c4c9;
+  color: #b3261e;
+  padding: 0.75rem 0.95rem;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.over-time { color: var(--danger); }
+
+/* CSS-only countdown: the bar drains over the allotted time */
+.timer-drain {
+  width: 100%;
+  animation-name: drain;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes drain {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
 @media (max-width: 560px) {
   .card { padding: 1.2rem; }
   .score-board { justify-content: center; text-align: center; }
