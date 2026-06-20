@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card screen auth-card">
+  <h2 class="card-title">Create your account</h2>
+  <p class="card-sub">Join QuestGen to generate adaptive quizzes on any topic.</p>
+
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <form class="form-grid" action="/signup" method="post">
+    <label class="field">
+      <span>Username</span>
+      <input id="username" name="username" type="text" value="{{ values.username or '' }}" autocomplete="username" required />
+      <small class="hint">3-24 characters: letters, numbers, dot or underscore.</small>
+    </label>
+
+    <label class="field">
+      <span>Email</span>
+      <input id="email" name="email" type="email" value="{{ values.email or '' }}" autocomplete="email" required />
+    </label>
+
+    <label class="field">
+      <span>Password</span>
+      <input id="password" name="password" type="password" autocomplete="new-password" required />
+      <small class="hint">At least 6 characters.</small>
+    </label>
+
+    <label class="field">
+      <span>Confirm Password</span>
+      <input id="confirm_password" name="confirm_password" type="password" autocomplete="new-password" required />
+    </label>
+
+    <button type="submit" class="btn btn-primary btn-block">Sign up</button>
+  </form>
+
+  <p class="auth-switch">Already have an account? <a href="/login">Log in</a></p>
+</section>
+{% endblock %}

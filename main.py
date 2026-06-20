@@ -10,13 +10,15 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi import Depends, FastAPI, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from pydantic import BaseModel
+
+import auth
 
 
 @dataclass(frozen=True)
@@ -939,17 +941,104 @@ app = FastAPI(title="Smart Question Generator")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
 
+SESSION_COOKIE = "qg_session"
+
+auth.init_db()
+
+
+def current_user(request: Request) -> dict[str, Any] | None:
+    return auth.get_session(request.cookies.get(SESSION_COOKIE))
+
 
 def category_options() -> list[dict[str, str]]:
     return [{"value": key, "label": subject_label(key)} for key in sorted(TEMPLATES.keys(), key=subject_label)]
 
 
+@app.get("/signup", response_class=HTMLResponse)
+def signup_page(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
+    if user:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(
+        request, "signup.html", {"user": None, "error": None, "values": {}}
+    )
+
+
+@app.post("/signup", response_class=HTMLResponse)
+async def signup_submit(request: Request) -> Response:
+    form = await request.form()
+    username = str(form.get("username", ""))
+    email = str(form.get("email", ""))
+    password = str(form.get("password", ""))
+    confirm = str(form.get("confirm_password", ""))
+
+    try:
+        new_user = auth.create_user(username, email, password, confirm)
+    except auth.AuthError as exc:
+        return templates.TemplateResponse(
+            request,
+            "signup.html",
+            {"user": None, "error": str(exc), "values": {"username": username, "email": email}},
+            status_code=400,
+        )
+
+    token = auth.create_session(new_user)
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=auth.SESSION_TTL_SECONDS
+    )
+    return response
+
+
+@app.get("/login", response_class=HTMLResponse)
+def login_page(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
+    if user:
+        return RedirectResponse("/", status_code=303)
+    return templates.TemplateResponse(
+        request, "login.html", {"user": None, "error": None, "values": {}}
+    )
+
+
+@app.post("/login", response_class=HTMLResponse)
+async def login_submit(request: Request) -> Response:
+    form = await request.form()
+    identifier = str(form.get("identifier", ""))
+    password = str(form.get("password", ""))
+
+    try:
+        user = auth.authenticate(identifier, password)
+    except auth.AuthError as exc:
+        return templates.TemplateResponse(
+            request,
+            "login.html",
+            {"user": None, "error": str(exc), "values": {"identifier": identifier}},
+            status_code=400,
+        )
+
+    token = auth.create_session(user)
+    response = RedirectResponse("/", status_code=303)
+    response.set_cookie(
+        SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=auth.SESSION_TTL_SECONDS
+    )
+    return response
+
+
+@app.get("/logout")
+def logout(request: Request) -> Response:
+    auth.destroy_session(request.cookies.get(SESSION_COOKIE))
+    response = RedirectResponse("/login", status_code=303)
+    response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request) -> HTMLResponse:
+def home(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
+    if not user:
+        return RedirectResponse("/login", status_code=303)
     return templates.TemplateResponse(
         request,
         "index.html",
         {
+            "user": user,
             "categories": category_options(),
             "difficulty_levels": DIFFICULTY_LEVELS,
             "error": None,
@@ -958,7 +1047,9 @@ def home(request: Request) -> HTMLResponse:
 
 
 @app.post("/quiz", response_class=HTMLResponse)
-async def quiz(request: Request) -> HTMLResponse:
+async def quiz(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
+    if not user:
+        return RedirectResponse("/login", status_code=303)
     form = await request.form()
 
     subject_key = str(form.get("subject", "")).strip().lower()
@@ -982,6 +1073,7 @@ async def quiz(request: Request) -> HTMLResponse:
             request,
             "index.html",
             {
+                "user": user,
                 "categories": category_options(),
                 "difficulty_levels": DIFFICULTY_LEVELS,
                 "error": "Please select at least one question type.",
@@ -994,6 +1086,7 @@ async def quiz(request: Request) -> HTMLResponse:
         request,
         "quiz.html",
         {
+            "user": user,
             "questions": data["questions"],
             "questions_json": serialize_questions(data["questions"]),
             "recommended_seconds": data["recommended_seconds"],
@@ -1008,7 +1101,9 @@ async def quiz(request: Request) -> HTMLResponse:
 
 
 @app.post("/result", response_class=HTMLResponse)
-async def result(request: Request) -> HTMLResponse:
+async def result(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
+    if not user:
+        return RedirectResponse("/login", status_code=303)
     form = await request.form()
     questions = deserialize_questions(str(form.get("questions", "")))
     answers = [str(form.get(f"answer_{q.id}", "")) for q in questions]
@@ -1027,6 +1122,7 @@ async def result(request: Request) -> HTMLResponse:
         request,
         "result.html",
         {
+            "user": user,
             "result": graded,
             "subject_label": str(form.get("subject_label", "")),
             "difficulty": str(form.get("difficulty", "")),

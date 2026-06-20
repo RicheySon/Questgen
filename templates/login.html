@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="card screen auth-card">
+  <h2 class="card-title">Welcome back</h2>
+  <p class="card-sub">Log in to build quizzes and track your progress.</p>
+
+  {% if error %}
+  <div class="alert">{{ error }}</div>
+  {% endif %}
+
+  <form class="form-grid" action="/login" method="post">
+    <label class="field">
+      <span>Username or Email</span>
+      <input id="identifier" name="identifier" type="text" value="{{ values.identifier or '' }}" autocomplete="username" required />
+    </label>
+
+    <label class="field">
+      <span>Password</span>
+      <input id="password" name="password" type="password" autocomplete="current-password" required />
+    </label>
+
+    <button type="submit" class="btn btn-primary btn-block">Log in</button>
+  </form>
+
+  <p class="auth-switch">New here? <a href="/signup">Create an account</a></p>
+</section>
+{% endblock %}

@@ -23,3 +23,6 @@ Thumbs.db
 # Exports generated at runtime
 questgen-questions.*
 questgen-result-sheet.pdf
+
+# Local database
+*.db

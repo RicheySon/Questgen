@@ -14,10 +14,16 @@
   <main class="container">
     <header class="hero">
       <div class="logo">QG</div>
-      <div>
+      <div class="hero-text">
         <h1>QuestGen</h1>
         <p class="tagline">A smart, adaptive quiz generator across every topic worth knowing.</p>
       </div>
+      {% if user %}
+      <div class="auth-nav">
+        <span class="auth-hi">Hi, {{ user.username }}</span>
+        <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
+      </div>
+      {% endif %}
     </header>
 
     {% block content %}{% endblock %}
