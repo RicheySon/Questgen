@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Question Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app-bg"></div>
+
+  <main class="container">
+    <header class="hero">
+      <div class="logo">QG</div>
+      <div>
+        <h1>Question Generator</h1>
+        <p class="tagline">A smart, adaptive quiz generator across every topic worth knowing.</p>
+      </div>
+    </header>
+
+    <!-- SETUP SCREEN -->
+    <section class="card screen" id="setup-screen">
+      <h2 class="card-title">Build your quiz</h2>
+      <p class="card-sub">Pick a topic, choose your style, and we'll adapt the difficulty and timing for you.</p>
+
+      <form id="generator-form" class="form-grid">
+        <label class="field">
+          <span>Category</span>
+          <select id="subject" name="subject"></select>
+        </label>
+
+        <label class="field">
+          <span>Focus Topic (optional)</span>
+          <input id="focus_topic" name="focus_topic" type="text" placeholder="e.g. Algebra, Space, World War II" autocomplete="off" />
+          <small class="hint">Narrow a category to a specific topic. We prioritise questions matching your keyword.</small>
+        </label>
+
+        <label class="field">
+          <span>Number of Questions</span>
+          <input id="total_questions" name="total_questions" type="number" min="1" max="30" value="8" />
+        </label>
+
+        <label class="field">
+          <span>Difficulty Level</span>
+          <select id="difficulty" name="difficulty">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+            <option value="advanced">Advanced</option>
+          </select>
+          <small class="hint">Your whole quiz is set to this level, and time per question tightens as difficulty rises.</small>
+        </label>
+
+        <fieldset class="field types">
+          <legend>Question Types (mix and match)</legend>
+          <label class="check"><input type="checkbox" id="multiple_choice" checked /> <span>Multiple Choice</span></label>
+          <label class="check"><input type="checkbox" id="short_answer" checked /> <span>Short Answer</span></label>
+          <label class="check"><input type="checkbox" id="true_false" checked /> <span>True / False</span></label>
+        </fieldset>
+
+        <div class="time-note" id="time-note">Time is allotted automatically: up to 1 minute per question on Easy, down to 25s on Advanced.</div>
+
+        <button type="submit" class="btn btn-primary btn-block">Generate Quiz</button>
+      </form>
+    </section>
+
+    <!-- QUIZ SCREEN -->
+    <section class="card screen hidden" id="quiz-screen">
+      <div class="quiz-head">
+        <div class="quiz-meta">
+          <span class="chip" id="subject-chip">-</span>
+          <span class="chip chip-soft" id="difficulty-chip">-</span>
+          <span class="chip chip-soft hidden" id="focus-chip">-</span>
+        </div>
+        <div class="timer" id="timer-box">
+          <span class="timer-icon">⏱</span>
+          <span id="quiz-timer">00:00</span>
+        </div>
+      </div>
+
+      <div class="progress-wrap">
+        <div class="progress-label">
+          <span>Progress</span>
+          <span id="progress-text">0 / 0</span>
+        </div>
+        <div class="progress-track">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+      </div>
+
+      <div id="question-list" class="question-list"></div>
+
+      <div class="actions">
+        <button id="submit-btn" class="btn btn-success">Submit Quiz</button>
+        <button id="export-json-btn" type="button" class="btn btn-ghost">Export JSON</button>
+        <button id="export-csv-btn" type="button" class="btn btn-ghost">Export CSV</button>
+        <button id="share-btn" type="button" class="btn btn-ghost">Share</button>
+      </div>
+    </section>
+
+    <!-- RESULTS SCREEN -->
+    <section class="card screen hidden" id="result-screen">
+      <h2 class="card-title">Your Results</h2>
+
+      <div class="score-board">
+        <div class="score-ring" id="score-ring">
+          <span id="result-score">0%</span>
+        </div>
+        <div class="score-stats">
+          <p><strong id="result-count">0 / 0</strong><span>Correct answers</span></p>
+          <p><strong id="result-message">-</strong><span>Performance</span></p>
+          <p><strong id="next-difficulty">-</strong><span>Suggested next level</span></p>
+        </div>
+      </div>
+
+      <div class="review-head">
+        <h3>Question Review</h3>
+        <div class="legend">
+          <span class="legend-item"><i class="dot dot-green"></i> Correct</span>
+          <span class="legend-item"><i class="dot dot-red"></i> Wrong</span>
+        </div>
+      </div>
+
+      <div id="feedback-list" class="feedback-list"></div>
+
+      <div class="actions">
+        <button id="retake-btn" type="button" class="btn btn-primary">New Quiz</button>
+        <button id="result-export-json" type="button" class="btn btn-ghost">Export JSON</button>
+        <button id="result-pdf" type="button" class="btn btn-ghost">Download PDF</button>
+      </div>
+    </section>
+
+    <footer class="foot">Built by Rejoice Akosua Dzanku</footer>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="/static/script.js"></script>
+</body>
+</html>
