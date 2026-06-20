@@ -27,7 +27,7 @@ The interface is fully server-rendered with Jinja2 templates and standard HTML f
 - **Templating:** Jinja2 (`templates/`)
 - **Styling:** CSS (`static/style.css`)
 - **PDF:** fpdf2
-- **No JavaScript** anywhere in the project.
+
 
 ## Run Locally
 
