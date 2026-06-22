@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuestGen - Question Generator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="app-bg"></div>
+  <main class="container">
+    <header class="hero">
+      <div class="logo">QG</div>
+      <div class="hero-text">
+        <h1>QuestGen</h1>
+        <p class="tagline">A smart question generator built with FastAPI, HTML and CSS.</p>
+      </div>
+    </header>
+
+    <section class="card screen">
+      <h2 class="card-title">Question Generator</h2>
+      <p class="card-sub">Enter a subject, an optional topic, and how many questions you want.</p>
+
+      <form class="form-grid" action="/generate" method="post">
+        <label class="field">
+          <span>Subject</span>
+          <select name="subject">
+            <option value="general">General Knowledge</option>
+            <option value="science">Science</option>
+            <option value="physics">Physics</option>
+            <option value="chemistry">Chemistry</option>
+            <option value="biology">Biology</option>
+            <option value="health">Health &amp; Medicine</option>
+            <option value="technology">Technology</option>
+            <option value="ai">Artificial Intelligence</option>
+            <option value="mathematics">Mathematics</option>
+            <option value="history">History</option>
+            <option value="geography">Geography</option>
+            <option value="space">Space &amp; Astronomy</option>
+            <option value="literature">Literature</option>
+            <option value="music">Music</option>
+            <option value="sports">Sports</option>
+            <option value="art">Art</option>
+            <option value="economics">Economics</option>
+          </select>
+        </label>
+
+        <label class="field">
+          <span>Topic (optional)</span>
+          <input type="text" name="topic" placeholder="e.g. Algebra, World War II, Space" autocomplete="off" />
+        </label>
+
+        <label class="field">
+          <span>Number of Questions</span>
+          <input type="number" name="number_of_questions" min="1" max="30" value="5" />
+        </label>
+
+        <button type="submit" class="btn btn-primary btn-block">Generate Questions</button>
+      </form>
+    </section>
+
+    <!--RESULTS-->
+
+    <footer class="foot">Built by Rejoice Akosua Dzanku</footer>
+  </main>
+</body>
+</html>

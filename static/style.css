@@ -340,6 +340,18 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 
 .auth-switch a:hover { text-decoration: underline; }
 
+/* Generated-questions list (StartoCode-spec generator) */
+.gen-choices {
+  margin: 0.5rem 0 0.7rem;
+  padding-left: 1.2rem;
+  color: var(--text);
+}
+
+.gen-choices li {
+  padding: 0.15rem 0;
+  font-size: 0.95rem;
+}
+
 @media (max-width: 560px) {
   .card { padding: 1.2rem; }
   .score-board { justify-content: center; text-align: center; }

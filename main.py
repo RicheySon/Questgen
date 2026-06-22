@@ -954,6 +954,61 @@ def category_options() -> list[dict[str, str]]:
     return [{"value": key, "label": subject_label(key)} for key in sorted(TEMPLATES.keys(), key=subject_label)]
 
 
+# --- StartoCode capstone compliance layer -------------------------------------
+# Required protocol: a static/index.html "face" page, a build_page() helper that
+# swaps a placeholder for real data, and an @app.post("/generate") form route
+# that returns an HTMLResponse. These coexist with the richer templated app.
+
+SPEC_INDEX_PATH = "static/index.html"
+RESULTS_PLACEHOLDER = "<!--RESULTS-->"
+
+
+def build_page(results_html: str = "") -> str:
+    """Load static/index.html and swap the results placeholder for real data."""
+    with open(SPEC_INDEX_PATH, "r", encoding="utf-8") as page_file:
+        page = page_file.read()
+    return page.replace(RESULTS_PLACEHOLDER, results_html)
+
+
+def render_results_html(questions: list[QuestionPayload], subject: str, topic: str) -> str:
+    """Convert generated questions into an HTML fragment for build_page()."""
+    if not questions:
+        return (
+            '<section class="card screen">'
+            '<p class="card-sub">No questions could be generated. Please try again.</p>'
+            "</section>"
+        )
+
+    topic_bit = f" &middot; Topic: {html.escape(topic)}" if topic else ""
+    parts = [
+        '<section class="card screen">',
+        '<h2 class="card-title">Generated Questions</h2>',
+        f'<p class="card-sub">Subject: {html.escape(subject_label(subject))}{topic_bit} '
+        f'&middot; {len(questions)} questions</p>',
+        '<div class="question-list">',
+    ]
+    for q in questions:
+        parts.append('<article class="question-card">')
+        parts.append(
+            f'<p class="question-meta">Question {q.id} &middot; '
+            f'{html.escape(q.question_type.replace("_", " "))} &middot; {html.escape(q.difficulty)}</p>'
+        )
+        parts.append(f'<p class="question-prompt">{html.escape(q.prompt)}</p>')
+        if q.choices:
+            parts.append('<ul class="gen-choices">')
+            for choice in q.choices:
+                parts.append(f"<li>{html.escape(choice)}</li>")
+            parts.append("</ul>")
+        parts.append(
+            f'<p class="answer-row good"><span class="label">Answer:</span> '
+            f'<span class="value">{html.escape(q.answer)}</span></p>'
+        )
+        parts.append(f'<p class="explain">{html.escape(q.explanation)}</p>')
+        parts.append("</article>")
+    parts.append("</div></section>")
+    return "".join(parts)
+
+
 @app.get("/signup", response_class=HTMLResponse)
 def signup_page(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
     if user:
@@ -1044,6 +1099,34 @@ def home(request: Request, user: dict[str, Any] | None = Depends(current_user)) 
             "error": None,
         },
     )
+
+
+@app.get("/generator", response_class=HTMLResponse)
+def generator_page() -> HTMLResponse:
+    """StartoCode-spec generator: serve static/index.html through build_page()."""
+    return HTMLResponse(build_page(""))
+
+
+@app.post("/generate", response_class=HTMLResponse)
+async def generate(request: Request) -> HTMLResponse:
+    """StartoCode-spec form route: take Subject/Topic/Number, generate, display."""
+    form = await request.form()
+
+    subject = str(form.get("subject", "general")).strip().lower()
+    if subject not in TEMPLATES:
+        subject = "general"
+    topic = str(form.get("topic", "")).strip()
+    number = parse_int(form.get("number_of_questions"), default=5, low=1, high=30)
+
+    data = generate_quiz(
+        subject_key=subject,
+        total_questions=number,
+        difficulty="medium",
+        focus_topic=topic,
+        selected_types=["multiple_choice", "true_false", "short_answer"],
+    )
+    results_html = render_results_html(data["questions"], subject, topic)
+    return HTMLResponse(build_page(results_html))
 
 
 @app.post("/quiz", response_class=HTMLResponse)
