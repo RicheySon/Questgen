@@ -7,22 +7,21 @@
       <span class="chip">{{ subject_label }}</span>
       <span class="chip chip-soft">{{ difficulty }} level</span>
       {% if focus_topic %}
-      <span class="chip chip-soft">Focus: {{ focus_topic }} ({{ focus_matched }}/{{ questions|length }} matched)</span>
+      <span class="chip chip-soft">
+        Focus: {{ focus_topic }}{% if focus_matched %} &middot; {{ focus_matched }} matched{% endif %}
+      </span>
       {% endif %}
-    </div>
-    <div class="timer">
-      <span class="timer-icon">&#9201;</span>
-      <span>{{ time_label }}</span>
+      <span class="chip chip-soft">&#128336; {{ time_label }} limit</span>
     </div>
   </div>
 
   <div class="progress-wrap">
     <div class="progress-label">
-      <span>Time remaining</span>
       <span>{{ questions|length }} questions</span>
+      <span>Answer all before submitting</span>
     </div>
     <div class="progress-track">
-      <div class="progress-bar timer-drain" style="animation-duration: {{ recommended_seconds }}s;"></div>
+      <div class="progress-bar" style="width: 100%;"></div>
     </div>
   </div>
 

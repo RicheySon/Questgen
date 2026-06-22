@@ -165,26 +165,11 @@ select:focus, input:focus, textarea:focus {
 }
 .chip-soft { background: #eef1ff; color: #3a44a8; }
 
-.timer {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  background: #0f1226;
-  color: white;
-  padding: 0.45rem 0.85rem;
-  border-radius: 12px;
-  font-size: 1.05rem;
-}
-.timer.warning { background: var(--danger); animation: pulse 1s infinite; }
-@keyframes pulse { 50% { opacity: 0.7; } }
-
 /* Progress */
 .progress-wrap { margin-bottom: 1.2rem; }
 .progress-label { display: flex; justify-content: space-between; color: var(--muted); font-size: 0.86rem; margin-bottom: 0.35rem; font-weight: 600; }
-.progress-track { width: 100%; height: 12px; border-radius: 999px; background: var(--track); overflow: hidden; }
-.progress-bar { width: 0%; height: 100%; border-radius: 999px; background: var(--primary); transition: width 0.25s ease; }
+.progress-track { width: 100%; height: 8px; border-radius: 999px; background: var(--track); overflow: hidden; }
+.progress-bar { height: 100%; border-radius: 999px; background: var(--primary); }
 
 /* Questions */
 .question-list { display: grid; gap: 0.9rem; }
@@ -290,18 +275,6 @@ a.btn { text-decoration: none; display: inline-flex; align-items: center; justif
 
 .over-time { color: var(--danger); }
 
-/* CSS-only countdown: the bar drains over the allotted time */
-.timer-drain {
-  width: 100%;
-  animation-name: drain;
-  animation-timing-function: linear;
-  animation-fill-mode: forwards;
-}
-
-@keyframes drain {
-  from { width: 100%; }
-  to { width: 0%; }
-}
 
 /* Auth */
 .hero-text { flex: 1; }

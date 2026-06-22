@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>QuestGen - Question Generator</title>
+  <title>QuestGen - Smart Question Generator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -16,20 +16,23 @@
       <div class="logo">QG</div>
       <div class="hero-text">
         <h1>QuestGen</h1>
-        <p class="tagline">A smart question generator built with FastAPI, HTML and CSS.</p>
+        <p class="tagline">A smart, adaptive quiz generator across every topic worth knowing.</p>
       </div>
+      <!--USER_NAV-->
     </header>
 
     <section class="card screen">
-      <h2 class="card-title">Question Generator</h2>
-      <p class="card-sub">Enter a subject, an optional topic, and how many questions you want.</p>
+      <h2 class="card-title">Build your quiz</h2>
+      <p class="card-sub">Pick a category, choose your style, and we&rsquo;ll handle the rest.</p>
+
+      <!--ERROR-->
 
       <form class="form-grid" action="/generate" method="post">
         <label class="field">
-          <span>Subject</span>
+          <span>Category</span>
           <select name="subject">
             <option value="general">General Knowledge</option>
-            <option value="science">Science</option>
+            <option value="science">Science &amp; Nature</option>
             <option value="physics">Physics</option>
             <option value="chemistry">Chemistry</option>
             <option value="biology">Biology</option>
@@ -49,16 +52,35 @@
         </label>
 
         <label class="field">
-          <span>Topic (optional)</span>
-          <input type="text" name="topic" placeholder="e.g. Algebra, World War II, Space" autocomplete="off" />
+          <span>Focus Topic (optional)</span>
+          <input type="text" name="focus_topic" placeholder="e.g. Algebra, World War II, Basketball" autocomplete="off" />
+          <small class="hint">Narrows questions to a specific topic within the category.</small>
         </label>
 
         <label class="field">
           <span>Number of Questions</span>
-          <input type="number" name="number_of_questions" min="1" max="30" value="5" />
+          <input type="number" name="total_questions" min="1" max="30" value="8" />
         </label>
 
-        <button type="submit" class="btn btn-primary btn-block">Generate Questions</button>
+        <label class="field">
+          <span>Difficulty Level</span>
+          <select name="difficulty">
+            <option value="easy">Easy</option>
+            <option value="medium" selected>Medium</option>
+            <option value="hard">Hard</option>
+            <option value="advanced">Advanced</option>
+          </select>
+          <small class="hint">Locks the entire quiz at this difficulty level.</small>
+        </label>
+
+        <fieldset class="field types">
+          <legend>Question Types (mix and match)</legend>
+          <label class="check"><input type="checkbox" name="multiple_choice" value="1" checked /> <span>Multiple Choice</span></label>
+          <label class="check"><input type="checkbox" name="short_answer" value="1" checked /> <span>Short Answer</span></label>
+          <label class="check"><input type="checkbox" name="true_false" value="1" checked /> <span>True / False</span></label>
+        </fieldset>
+
+        <button type="submit" class="btn btn-primary btn-block">Generate Quiz</button>
       </form>
     </section>
 

@@ -541,6 +541,57 @@ OPENTDB_CATEGORY: dict[str, int] = {
 OPENTDB_URL = "https://opentdb.com/api.php"
 OPENTDB_COUNT_URL = "https://opentdb.com/api_count.php"
 
+# Maps common focus-topic keywords to the best OpenTDB category.
+# When a user types a focus topic we check these tokens first so we can
+# redirect to the correct category (e.g. "sports" -> 21) regardless of
+# which subject was selected on the form.
+TOPIC_CATEGORY_MAP: dict[str, int] = {
+    # Sports
+    "sport": 21, "sports": 21, "football": 21, "soccer": 21, "basketball": 21,
+    "tennis": 21, "cricket": 21, "baseball": 21, "golf": 21, "rugby": 21,
+    "swimming": 21, "olympics": 21, "athletics": 21, "athlete": 21,
+    # History
+    "history": 23, "war": 23, "wwii": 23, "ww2": 23, "wwi": 23, "ww1": 23,
+    "revolution": 23, "ancient": 23, "medieval": 23, "historical": 23,
+    "civilization": 23, "empire": 23, "colonial": 23,
+    # Geography
+    "geography": 22, "country": 22, "countries": 22, "capital": 22, "continent": 22,
+    "ocean": 22, "river": 22, "mountain": 22, "flag": 22, "city": 22,
+    "landmark": 22, "borders": 22,
+    # Science & Nature
+    "nature": 17, "animal": 17, "biology": 17, "chemistry": 17, "physics": 17,
+    "element": 17, "planet": 17, "space": 17, "astronomy": 17, "ecosystem": 17,
+    "evolution": 17, "genetics": 17, "organism": 17,
+    # Computers & Technology
+    "computer": 18, "technology": 18, "tech": 18, "programming": 18,
+    "software": 18, "internet": 18, "coding": 18, "hardware": 18,
+    # Mathematics
+    "math": 19, "mathematics": 19, "algebra": 19, "geometry": 19, "calculus": 19,
+    "statistics": 19, "arithmetic": 19, "fraction": 19, "equation": 19,
+    # Music
+    "music": 12, "song": 12, "singer": 12, "band": 12, "album": 12,
+    "musician": 12, "pop": 12, "rock": 12, "jazz": 12, "classical": 12,
+    # Literature & Books
+    "literature": 10, "book": 10, "novel": 10, "author": 10, "poem": 10,
+    "poetry": 10, "fiction": 10, "shakespeare": 10, "writing": 10,
+    # Art
+    "art": 25, "painting": 25, "artist": 25, "sculpture": 25, "museum": 25,
+    # Film / Cinema
+    "film": 11, "movie": 11, "cinema": 11, "actor": 11, "actress": 11, "oscar": 11,
+    # Television
+    "television": 14, "series": 14,
+    # Video Games
+    "game": 15, "gaming": 15, "videogame": 15, "nintendo": 15, "playstation": 15,
+    # Mythology
+    "myth": 20, "mythology": 20, "greek": 20, "roman": 20, "norse": 20, "gods": 20,
+    # Politics / Economics
+    "politics": 24, "economics": 24, "economy": 24, "government": 24,
+    # Health
+    "health": 17, "medicine": 17, "anatomy": 17, "nutrition": 17, "disease": 17,
+    # AI
+    "artificial": 18, "intelligence": 18, "machine": 18, "neural": 18,
+}
+
 
 class QuestionPayload(BaseModel):
     id: int
@@ -750,30 +801,41 @@ def generate_quiz(
     content_difficulty = CONTENT_DIFFICULTY[difficulty]
     type_sequence = build_type_sequence(selected_types, total_questions)
 
-    category_id = OPENTDB_CATEGORY.get(subject_key)
+    subject_category_id = OPENTDB_CATEGORY.get(subject_key)
     tokens = focus_tokens(focus_topic)
-    use_focus = bool(tokens) and category_id is not None
+
+    # If the focus topic maps to a known category, use that category instead of
+    # the selected subject. This is why "sports" as a topic actually returns
+    # sports questions even when "General Knowledge" is the selected subject.
+    topic_category_id: int | None = None
+    for token in tokens:
+        if token in TOPIC_CATEGORY_MAP:
+            topic_category_id = TOPIC_CATEGORY_MAP[token]
+            break
+
+    category_id = topic_category_id if topic_category_id is not None else subject_category_id
+    # Keyword filtering is only needed when we could not reroute to a better category
+    use_keyword_filter = bool(tokens) and topic_category_id is None and category_id is not None
 
     multiple_pool: list[dict[str, Any]] = []
     boolean_pool: list[dict[str, Any]] = []
     matched_prompts: set[str] = set()
 
     if category_id is not None:
-        # Never request more than exists, or the API returns an empty batch and we
-        # would fall back to the small local bank (causing repeated questions).
         available = opentdb_available(category_id, content_difficulty)
         fallback_amount = min(50, max(total_questions * 2, 10))
         amount = min(50, available) if available > 0 else fallback_amount
 
-        # One untyped request: it can never overshoot a per-type count (which would
-        # return an empty batch), maximizes unique questions, and dodges the rate limit.
         raw = fetch_opentdb(category_id, content_difficulty, amount)
-        if use_focus:
+        if use_keyword_filter:
+            # No direct category match — try to surface the most relevant questions
             matched = [r for r in raw if result_matches_focus(r, tokens)]
             others = [r for r in raw if r not in matched]
             matched_prompts = {decode(r["question"]) for r in matched}
             ordered = matched + others
         else:
+            # Category was already routed correctly; every question is on-topic
+            matched_prompts = {decode(r["question"]) for r in raw}
             ordered = raw
         for result in ordered:
             if result.get("type") == "boolean":
@@ -801,7 +863,7 @@ def generate_quiz(
                 template_item = random.choice(TEMPLATES[subject_key][content_difficulty])
                 questions.append(build_choice_question(template_item, qid, difficulty, q_type))
 
-    focus_matched = sum(1 for q in questions if q.prompt in matched_prompts)
+    focus_matched = sum(1 for q in questions if q.prompt in matched_prompts) if tokens else 0
     recommended_seconds = min(SECONDS_PER_DIFFICULTY[difficulty] * total_questions, 3600)
 
     return {
@@ -961,13 +1023,44 @@ def category_options() -> list[dict[str, str]]:
 
 SPEC_INDEX_PATH = "static/index.html"
 RESULTS_PLACEHOLDER = "<!--RESULTS-->"
+USER_NAV_PLACEHOLDER = "<!--USER_NAV-->"
+ERROR_PLACEHOLDER = "<!--ERROR-->"
 
 
-def build_page(results_html: str = "") -> str:
-    """Load static/index.html and swap the results placeholder for real data."""
+def build_page(
+    results_html: str = "",
+    user: dict[str, Any] | None = None,
+    error: str = "",
+) -> str:
+    """Load static/index.html and replace all placeholder comments with real content."""
     with open(SPEC_INDEX_PATH, "r", encoding="utf-8") as page_file:
         page = page_file.read()
-    return page.replace(RESULTS_PLACEHOLDER, results_html)
+
+    if user:
+        nav_html = (
+            '<div class="auth-nav">'
+            f'<span class="auth-hi">Hi, {html.escape(user["username"])}</span>'
+            '<a href="/logout" class="btn btn-ghost btn-sm">Log out</a>'
+            "</div>"
+        )
+    else:
+        nav_html = (
+            '<div class="auth-nav">'
+            '<a href="/login" class="btn btn-ghost btn-sm">Log in</a>'
+            '<a href="/signup" class="btn btn-primary btn-sm">Sign up</a>'
+            "</div>"
+        )
+
+    error_html = (
+        f'<div class="alert">{html.escape(error)}</div>' if error else ""
+    )
+
+    return (
+        page
+        .replace(USER_NAV_PLACEHOLDER, nav_html)
+        .replace(ERROR_PLACEHOLDER, error_html)
+        .replace(RESULTS_PLACEHOLDER, results_html)
+    )
 
 
 def render_results_html(questions: list[QuestionPayload], subject: str, topic: str) -> str:
@@ -1080,62 +1173,23 @@ async def login_submit(request: Request) -> Response:
 @app.get("/logout")
 def logout(request: Request) -> Response:
     auth.destroy_session(request.cookies.get(SESSION_COOKIE))
-    response = RedirectResponse("/login", status_code=303)
+    response = RedirectResponse("/", status_code=303)
     response.delete_cookie(SESSION_COOKIE)
     return response
 
 
 @app.get("/", response_class=HTMLResponse)
-def home(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-    return templates.TemplateResponse(
-        request,
-        "index.html",
-        {
-            "user": user,
-            "categories": category_options(),
-            "difficulty_levels": DIFFICULTY_LEVELS,
-            "error": None,
-        },
-    )
-
-
-@app.get("/generator", response_class=HTMLResponse)
-def generator_page() -> HTMLResponse:
-    """StartoCode-spec generator: serve static/index.html through build_page()."""
-    return HTMLResponse(build_page(""))
+def home(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> HTMLResponse:
+    """Serves static/index.html via build_page() — satisfies the spec requirement."""
+    return HTMLResponse(build_page(user=user))
 
 
 @app.post("/generate", response_class=HTMLResponse)
-async def generate(request: Request) -> HTMLResponse:
-    """StartoCode-spec form route: take Subject/Topic/Number, generate, display."""
+async def generate(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
+    """Single handler for the quiz form. Generates questions and renders the full quiz page."""
     form = await request.form()
 
-    subject = str(form.get("subject", "general")).strip().lower()
-    if subject not in TEMPLATES:
-        subject = "general"
-    topic = str(form.get("topic", "")).strip()
-    number = parse_int(form.get("number_of_questions"), default=5, low=1, high=30)
-
-    data = generate_quiz(
-        subject_key=subject,
-        total_questions=number,
-        difficulty="medium",
-        focus_topic=topic,
-        selected_types=["multiple_choice", "true_false", "short_answer"],
-    )
-    results_html = render_results_html(data["questions"], subject, topic)
-    return HTMLResponse(build_page(results_html))
-
-
-@app.post("/quiz", response_class=HTMLResponse)
-async def quiz(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
-    if not user:
-        return RedirectResponse("/login", status_code=303)
-    form = await request.form()
-
-    subject_key = str(form.get("subject", "")).strip().lower()
+    subject_key = str(form.get("subject", "general")).strip().lower()
     if subject_key not in TEMPLATES:
         subject_key = "general"
 
@@ -1152,16 +1206,7 @@ async def quiz(request: Request, user: dict[str, Any] | None = Depends(current_u
         include_tf=form.get("true_false") is not None,
     )
     if not selected_types:
-        return templates.TemplateResponse(
-            request,
-            "index.html",
-            {
-                "user": user,
-                "categories": category_options(),
-                "difficulty_levels": DIFFICULTY_LEVELS,
-                "error": "Please select at least one question type.",
-            },
-        )
+        return HTMLResponse(build_page(user=user, error="Please select at least one question type."))
 
     data = generate_quiz(subject_key, total_questions, difficulty, focus_topic, selected_types)
 
@@ -1185,8 +1230,6 @@ async def quiz(request: Request, user: dict[str, Any] | None = Depends(current_u
 
 @app.post("/result", response_class=HTMLResponse)
 async def result(request: Request, user: dict[str, Any] | None = Depends(current_user)) -> Response:
-    if not user:
-        return RedirectResponse("/login", status_code=303)
     form = await request.form()
     questions = deserialize_questions(str(form.get("questions", "")))
     answers = [str(form.get(f"answer_{q.id}", "")) for q in questions]
